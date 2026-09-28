@@ -1,0 +1,13 @@
+Reflection 
+
+1. Fractional numbers
+
+The line where I decided that the "." starts a fractional part is src/scanner.rs:157. The scanner checks that the current character is "." and that the next character is a digit to include the dot in the number. This is important because according to section 1.4, the fractional part must contain the dot followed by one or more digits. For the input "5.", my scanner first reads "5" as a NUMBER. Upon reaching "." the scanner checks the condition in src/scanner.rs:157 , which is false because there is no digit following the dot. The "5" is then added as a NUMBER, and the "." is scanned separately. Since "." is not a token by itself, the scanner reports "Character is not part of any token." This is, hence, consistent with the specification since "5." is not a valid number. It also means that ".5" cannot begin a number since numbers must begin with a digit.
+
+2. Line counting and EOF
+
+My scanner changes the line counter in two places. src/scanner.rs:112 increments the counter upon finding a normal newline and src/scanner.rs:135 increments it when a newline occurs inside a string. Let's say a file has its last real token on line 1 with two blank lines at the end. The scanner's current line counter would have incremented to line 3 upon reading the newlines. However, the EOF token should have line 1, not 3. According to section 6.1, EOF uses the line of the last real token because blank lines at the end of a file are not considered tokens. Therefore, my "run" function gets the line from the last token using the "eof_line" calculation at src/scanner.rs:36 and uses it in creating EOF at src/scanner.rs:45 . If there are no real tokens, it uses line 1.
+
+3. Debugging mistake
+
+One test that I initially failed was tests/phase-1/valid/eof_line.kobo. My mistake was misunderstanding what line the EOF should belong to. In my previous commit efa93e0, src/scanner.rs:39 contained "line: self.line,". I was using the scanner's line, which had advanced beyond the last real token because of the blank lines at the end of the file. The test expects [line 1] EOF " but my scanner was reporting [line 9] EOF " . I fixed this in commit c2ea548 . The relevant line changed to src/scanner.rs:45 . It now contains "line: eof_line,". The difference is that "eof_line" comes from the last real token rather than from the scanner directly. It helped me learn that EOF usually marks the end of the token stream, not the physical end of the source file.
