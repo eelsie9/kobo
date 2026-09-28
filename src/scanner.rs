@@ -33,10 +33,16 @@ impl Scanner {
     self.scan_token();
 }
 
+let eof_line = self
+    .tokens
+    .last()
+    .map(|token| token.line)
+    .unwrap_or(1);
+
 self.tokens.push(Token {
     kind: TokenType::Eof,
     lexeme: String::new(),
-    line: self.line,
+    line: eof_line,
 });
     }
 
