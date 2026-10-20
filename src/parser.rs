@@ -44,12 +44,17 @@ type Parsed<T> = Result<T, ()>;
 impl Parser {
     // --- declarations and statements ------------------------------------------------
 
-    fn declaration(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: a declaration is a fun, a var, or a statement. This is also
-        //            where an error is caught and synchronise() runs.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.statement()
+    
+fn declaration(&mut self) -> Parsed<Stmt> {
+    if self.matches(&[TokenType::Fun]) {
+        return self.fun_declaration();
+    }
+
+    if self.matches(&[TokenType::Var]) {
+        return self.var_declaration();
+    }
+
+    self.statement()
     }
 
     fn fun_declaration(&mut self) -> Parsed<Stmt> {
@@ -59,8 +64,27 @@ impl Parser {
     }
 
     fn var_declaration(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: 'var' name ( '=' expression )? ';'
-        todo!("var_declaration")
+    let name = self.consume(
+        TokenType::Identifier,
+        "Expect a variable name",
+    )?;
+
+    let initialiser = if self.matches(&[TokenType::Equal]) {
+        Some(self.expression()?)
+    } else {
+        None
+    };
+
+    self.consume(
+        TokenType::Semicolon,
+        "Expect ';' after the variable is declared",
+    )?;
+
+    Ok(Stmt::Var {
+        name,
+        initialiser,
+        slot: None,
+    })
     }
 
     fn statement(&mut self) -> Parsed<Stmt> {
