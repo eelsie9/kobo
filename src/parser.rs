@@ -194,15 +194,38 @@ fn declaration(&mut self) -> Parsed<Stmt> {
         self.term()
     }
 
-    fn term(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        todo!("term")
+fn term(&mut self) -> Parsed<Expr> {
+    let mut expr = self.factor()?;
+
+    while self.matches(&[TokenType::Plus, TokenType::Minus]) {
+        let op = self.previous();
+        let right = self.factor()?;
+
+        expr = Expr::Binary {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
 
-    fn factor(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        todo!("factor")
+    Ok(expr)
+}
+fn factor(&mut self) -> Parsed<Expr> {
+    let mut expr = self.unary()?;
+
+    while self.matches(&[TokenType::Star, TokenType::Slash]) {
+        let op = self.previous();
+        let right = self.unary()?;
+
+        expr = Expr::Binary {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
+
+    Ok(expr)
+}
 
     fn unary(&mut self) -> Parsed<Expr> {
         // TODO(you): spec 3.2: unary operators are right-associative.
