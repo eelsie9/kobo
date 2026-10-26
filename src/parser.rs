@@ -176,32 +176,73 @@ fn declaration(&mut self) -> Parsed<Stmt> {
     }
 
     fn or(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.and()
+    let mut expr = self.and()?;
+
+    while self.matches(&[TokenType::Or]) {
+        let op = self.previous();
+        let right = self.equality()?; // Deliberate mistake
+        expr = Expr::Logical {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
 
-    fn and(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.equality()
+    Ok(expr)
+}
+
+fn and(&mut self) -> Parsed<Expr> {
+    let mut expr = self.equality()?;
+
+    while self.matches(&[TokenType::And]) {
+        let op = self.previous();
+        let right = self.equality()?;
+        expr = Expr::Logical {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
 
-    fn equality(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.comparison()
+    Ok(expr)
+}
+
+fn equality(&mut self) -> Parsed<Expr> {
+    let mut expr = self.comparison()?;
+
+    while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
+        let op = self.previous();
+        let right = self.comparison()?;
+        expr = Expr::Binary {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
 
-    fn comparison(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.term()
+    Ok(expr)
+}
+
+fn comparison(&mut self) -> Parsed<Expr> {
+    let mut expr = self.term()?;
+
+    while self.matches(&[
+        TokenType::Greater,
+        TokenType::GreaterEqual,
+        TokenType::Less,
+        TokenType::LessEqual,
+    ]) {
+        let op = self.previous();
+        let right = self.term()?;
+        expr = Expr::Binary {
+            left: Box::new(expr),
+            op,
+            right: Box::new(right),
+        };
     }
+
+    Ok(expr)
+}
 
 fn term(&mut self) -> Parsed<Expr> {
     let mut expr = self.factor()?;
