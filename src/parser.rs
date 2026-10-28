@@ -168,19 +168,34 @@ fn declaration(&mut self) -> Parsed<Stmt> {
     /// way. So the left side is parsed as an ordinary expression and *then* checked, which
     /// is the standard answer to a rule that is not LL(1).
     fn assignment(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2. The left side parses as an ordinary expression and is checked
-        //            afterwards, because the rule is not LL(1).
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.or()
+    let expr = self.or()?;
+
+    if self.matches(&[TokenType::Equal]) {
+        let equals = self.previous();
+        let value = self.assignment()?;
+
+        if let Expr::Variable { name, at } = expr {
+            return Ok(Expr::Assign {
+                name,
+                value: Box::new(value),
+                at,
+            });
+        }
+
+        self.error_at(&equals, "Invalid assignment target.");
+        return Err(());
     }
+
+    Ok(expr)
+}
 
     fn or(&mut self) -> Parsed<Expr> {
     let mut expr = self.and()?;
 
     while self.matches(&[TokenType::Or]) {
         let op = self.previous();
-        let right = self.equality()?; // Deliberate mistake
+        let right = self.and()?;
+
         expr = Expr::Logical {
             left: Box::new(expr),
             op,
@@ -191,7 +206,7 @@ fn declaration(&mut self) -> Parsed<Stmt> {
     Ok(expr)
 }
 
-fn and(&mut self) -> Parsed<Expr> {
+    fn and(&mut self) -> Parsed<Expr> {
     let mut expr = self.equality()?;
 
     while self.matches(&[TokenType::And]) {
@@ -207,7 +222,7 @@ fn and(&mut self) -> Parsed<Expr> {
     Ok(expr)
 }
 
-fn equality(&mut self) -> Parsed<Expr> {
+    fn equality(&mut self) -> Parsed<Expr> {
     let mut expr = self.comparison()?;
 
     while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
@@ -223,7 +238,7 @@ fn equality(&mut self) -> Parsed<Expr> {
     Ok(expr)
 }
 
-fn comparison(&mut self) -> Parsed<Expr> {
+    fn comparison(&mut self) -> Parsed<Expr> {
     let mut expr = self.term()?;
 
     while self.matches(&[
@@ -244,7 +259,7 @@ fn comparison(&mut self) -> Parsed<Expr> {
     Ok(expr)
 }
 
-fn term(&mut self) -> Parsed<Expr> {
+    fn term(&mut self) -> Parsed<Expr> {
     let mut expr = self.factor()?;
 
     while self.matches(&[TokenType::Plus, TokenType::Minus]) {
@@ -260,7 +275,8 @@ fn term(&mut self) -> Parsed<Expr> {
 
     Ok(expr)
 }
-fn factor(&mut self) -> Parsed<Expr> {
+
+    fn factor(&mut self) -> Parsed<Expr> {
     let mut expr = self.unary()?;
 
     while self.matches(&[TokenType::Star, TokenType::Slash]) {
@@ -278,33 +294,111 @@ fn factor(&mut self) -> Parsed<Expr> {
 }
 
     fn unary(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: unary operators are right-associative.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.call()
+    if self.matches(&[TokenType::Bang, TokenType::Minus]) {
+        let op = self.previous();
+        let right = self.unary()?;
+
+        return Ok(Expr::Unary {
+            op,
+            right: Box::new(right),
+        });
     }
+
+    self.call()
+}
 
     /// A loop, not recursion: `f(1)(2)` is one callee called twice, and the grammar says
     /// `call → primary ( "(" arguments? ")" )*` for exactly that reason.
-    fn call(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: call -> primary ( '(' arguments? ')' )*. That is a loop, not
-        //            recursion; f(1)(2) is one callee called twice.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        self.primary()
+fn call(&mut self) -> Parsed<Expr> {
+    let mut expr = self.primary()?;
+
+    loop {
+        if self.matches(&[TokenType::LParen]) {
+            let args = self.arguments()?;
+
+            let paren = self.consume(
+                TokenType::RParen,
+                "Expect ')' after arguments.",
+            )?;
+
+            expr = Expr::Call {
+                callee: Box::new(expr),
+                paren,
+                args,
+            };
+        } else {
+            break;
+        }
     }
 
-    fn primary(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: literals, identifiers and grouping.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        if self.matches(&[TokenType::Number]) {
-            let n = self.previous().lexeme.parse::<f64>().unwrap();
-            return Ok(self.literal(Value::Number(n)));
+    Ok(expr)
+}
+
+fn arguments(&mut self) -> Parsed<Vec<Expr>> {
+    let mut args = Vec::new();
+
+    if !self.check(TokenType::RParen) {
+        loop {
+            args.push(self.expression()?);
+
+            if !self.matches(&[TokenType::Comma]) {
+                break;
+            }
         }
-        self.error("Expect expression.");
-        Err(())
     }
+
+    Ok(args)
+}
+
+    fn primary(&mut self) -> Parsed<Expr> {
+    if self.matches(&[TokenType::False]) {
+        return Ok(self.literal(Value::Bool(false)));
+    }
+
+    if self.matches(&[TokenType::True]) {
+        return Ok(self.literal(Value::Bool(true)));
+    }
+
+    if self.matches(&[TokenType::Nil]) {
+        return Ok(self.literal(Value::Nil));
+    }
+
+    if self.matches(&[TokenType::Number]) {
+        let n = self.previous().lexeme.parse::<f64>().unwrap();
+        return Ok(self.literal(Value::Number(n)));
+    }
+
+    if self.matches(&[TokenType::Str]) {
+        let token = self.previous();
+        let value = token.lexeme[1..token.lexeme.len() - 1].to_string();
+
+        return Ok(Expr::Literal {
+            value: Value::Str(value),
+            line: token.line,
+        });
+    }
+
+    if self.matches(&[TokenType::Identifier]) {
+        return Ok(Expr::Variable {
+            name: self.previous(),
+            at: Resolved::Global,
+        });
+    }
+
+    if self.matches(&[TokenType::LParen]) {
+        let expr = self.expression()?;
+
+        self.consume(
+            TokenType::RParen,
+            "Expect ')' after expression.",
+        )?;
+
+        return Ok(Expr::Grouping(Box::new(expr)));
+    }
+
+    self.error("Expect expression.");
+    Err(())
+}
 
     // --- error recovery ---------------------------------------------------------------
 
