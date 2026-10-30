@@ -186,7 +186,7 @@ impl Parser {
     }
 
     fn return_statement(&mut self) -> Parsed<Stmt> {
-        let value = if self.check(TokenType::Semicolon) {
+        let value = if !self.check(TokenType::Semicolon) {
             Some(self.expression()?)
         } else {
             None
